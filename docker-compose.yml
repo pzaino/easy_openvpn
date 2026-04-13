@@ -18,10 +18,11 @@ services:
       WAN_IFACE: "eth0"
       ENABLE_NAT: "true"
     volumes:
-      - ./openvpn/server:/etc/openvpn/server
+      #- ./openvpn/server:/etc/openvpn/server
       - ./openvpn/pki:/etc/openvpn/pki
       - ./openvpn/clients:/etc/openvpn/clients
       - ./openvpn/ccd:/etc/openvpn/ccd
+      - ./server.conf:/etc/openvpn/server/server.conf
     sysctls:
       net.ipv4.conf.all.src_valid_mark: "1"
 

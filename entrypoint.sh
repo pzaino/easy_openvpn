@@ -26,9 +26,9 @@ WAN_IFACE="${WAN_IFACE:-eth0}"
 ENABLE_NAT="${ENABLE_NAT:-true}"
 
 required_files=(
-  /etc/openvpn/pki/ca.crt
-  /etc/openvpn/pki/issued/server.crt
-  /etc/openvpn/pki/private/server.key
+  /etc/openvpn/pki/easyrsa/ca.crt
+  /etc/openvpn/pki/easyrsa/issued/server.crt
+  /etc/openvpn/pki/easyrsa/private/server.key
   /etc/openvpn/pki/tls-crypt.key
   /etc/openvpn/server/server.conf
 )

@@ -13,5 +13,7 @@ COPY add-client.sh /add-client.sh
 
 RUN chmod +x /entrypoint.sh /init-pki.sh /add-client.sh
 
+COPY server.conf /etc/openvpn/server/server.conf
+
 ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]
 
