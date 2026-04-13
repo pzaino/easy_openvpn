@@ -12,9 +12,13 @@ docker compose run --rm openvpn init-pki
 
 ## Add a user
 
+```bash
 docker compose run --rm openvpn add-client laptop-alex
+```
 
 ## Run the Server
 
+```bash
 docker compose up -d
+```
 
