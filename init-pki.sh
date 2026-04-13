@@ -2,7 +2,8 @@
 set -euo pipefail
 
 cd /opt/easy-rsa
-export EASYRSA_PKI=/etc/openvpn/pki
+export EASYRSA_PKI=/etc/openvpn/pki/easyrsa
+mkdir -p /etx/openvpn/pki
 
 if [ -f "$EASYRSA_PKI/ca.crt" ]; then
   echo "PKI already exists at $EASYRSA_PKI" >&2

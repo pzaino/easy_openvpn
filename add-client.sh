@@ -4,7 +4,7 @@ set -euo pipefail
 CLIENT_NAME="${1:?usage: add-client <client-name>}"
 
 cd /opt/easy-rsa
-export EASYRSA_PKI=/etc/openvpn/pki
+export EASYRSA_PKI=/etc/openvpn/pki/easyrsa
 
 if [ ! -f "$EASYRSA_PKI/ca.crt" ]; then
   echo "PKI is not initialized" >&2
