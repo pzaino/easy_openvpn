@@ -1,0 +1,27 @@
+services:
+  openvpn:
+    build: .
+    container_name: openvpn
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - "1194:1194/udp"
+    environment:
+      VPN_SUBNET: "10.8.0.0/24"
+      VPN_PORT: "1194"
+      VPN_PROTO: "udp"
+      VPN_DEV: "tun0"
+      LAN_CIDR: "10.20.0.0/16"
+      WAN_IFACE: "eth0"
+      ENABLE_NAT: "true"
+    volumes:
+      - ./openvpn/server:/etc/openvpn/server
+      - ./openvpn/pki:/etc/openvpn/pki
+      - ./openvpn/clients:/etc/openvpn/clients
+      - ./openvpn/ccd:/etc/openvpn/ccd
+    sysctls:
+      net.ipv4.conf.all.src_valid_mark: "1"
+
