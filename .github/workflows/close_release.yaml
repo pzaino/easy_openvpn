@@ -1,0 +1,115 @@
+name: Close Release
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (do not push tag or create release)"
+        required: false
+        default: "false"
+      prerelease:
+        description: "Mark release as pre-release"
+        required: false
+        default: "false"
+
+jobs:
+  close-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911
+        with:
+          egress-policy: audit
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+
+      - name: Checkout repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+
+      - name: Read release version
+        id: get_version
+        run: |
+          if [ ! -f RELEASE_VERSION.txt ]; then
+            echo "ERROR: RELEASE_VERSION.txt not found"
+            exit 1
+          fi
+
+          VERSION="$(tr -d '[:space:]' < RELEASE_VERSION.txt)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release version: $VERSION"
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: Version must match vMAJOR.MINOR.PATCH, for example v1.2.3"
+            exit 1
+          fi
+
+      - name: Ensure tag does not already exist
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "ERROR: Tag $VERSION already exists"
+            exit 1
+          fi
+
+      - name: Create Git tag
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git tag "$VERSION"
+          git push origin "$VERSION"
+
+      - name: Find previous tag
+        id: prev
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          PREV="$(git describe --tags --abbrev=0 "${VERSION}^" 2>/dev/null || true)"
+          echo "prev_tag=$PREV" >> "$GITHUB_OUTPUT"
+          echo "Previous tag: ${PREV:-<none>}"
+
+      - name: Build release body
+        id: notes
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          PREV="${{ steps.prev.outputs.prev_tag }}"
+
+          {
+            echo "body<<EOF"
+            echo "Release $VERSION"
+            echo
+            if [ -n "$PREV" ]; then
+              echo "**Full Changelog**:"
+              echo "https://github.com/${{ github.repository }}/compare/$PREV...$VERSION"
+            else
+              echo "Initial release."
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          name: Release ${{ steps.get_version.outputs.version }}
+          body: ${{ steps.notes.outputs.body }}
+          generate_release_notes: true
+          prerelease: ${{ github.event.inputs.prerelease }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Dry run notice
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "[DRY RUN] Would have created tag and GitHub release for version ${{ steps.get_version.outputs.version }}"

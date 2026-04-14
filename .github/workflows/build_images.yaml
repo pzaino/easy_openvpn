@@ -1,0 +1,123 @@
+name: Build and Push OpenVPN Image
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Git ref to build from, for example main or v1.0.0"
+        required: true
+        default: "main"
+      dry_run:
+        description: "Build only, do not push"
+        required: false
+        default: "false"
+  push:
+    tags:
+      - "v*"
+
+env:
+  REGISTRY: docker.io
+  IMAGE_OWNER: zfpsystems
+  IMAGE_NAME: easy-openvpn
+  DOCKER_BUILDKIT: 1
+  BUILDKIT_PROGRESS: plain
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911
+        with:
+          egress-policy: audit
+          allowed-endpoints: >
+            auth.docker.io:443
+            docker.io:443
+            github.com:443
+            production.cloudflare.docker.com:443
+            registry-1.docker.io:443
+
+      - name: Checkout selected ref for manual run
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.release_tag }}
+
+      - name: Checkout pushed tag
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+
+      - name: Determine image tag
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.release_tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+
+          if ! [[ "$TAG" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+            echo "ERROR: Invalid Docker tag: $TAG"
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
+        with:
+          install: true
+
+      - name: Log in to Docker Hub
+        if: ${{ github.event.inputs.dry_run != 'true' || github.event_name == 'push' }}
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PAT }}
+
+      - name: Build only
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            -t $REGISTRY/$IMAGE_OWNER/$IMAGE_NAME:${{ steps.meta.outputs.tag }} \
+            --load \
+            .
+
+      - name: Build and push version tag
+        if: ${{ github.event_name == 'push' || github.event.inputs.dry_run != 'true' }}
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --cache-from=type=registry,ref=$REGISTRY/$IMAGE_OWNER/$IMAGE_NAME:cache \
+            --cache-to=type=registry,ref=$REGISTRY/$IMAGE_OWNER/$IMAGE_NAME:cache,mode=max \
+            -t $REGISTRY/$IMAGE_OWNER/$IMAGE_NAME:${{ steps.meta.outputs.tag }} \
+            --push \
+            .
+
+      - name: Tag as latest
+        if: ${{ steps.meta.outputs.is_release == 'true' && (github.event_name == 'push' || github.event.inputs.dry_run != 'true') }}
+        run: |
+          docker buildx imagetools create \
+            --tag $REGISTRY/$IMAGE_OWNER/$IMAGE_NAME:latest \
+            $REGISTRY/$IMAGE_OWNER/$IMAGE_NAME:${{ steps.meta.outputs.tag }}
+
+      - name: Log out
+        if: ${{ github.event.inputs.dry_run != 'true' || github.event_name == 'push' }}
+        run: docker logout

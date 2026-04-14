@@ -3,7 +3,22 @@
 A simple and quick way to deploy an OpenVPN server, with some degrees of hardening and 
 enough to create custom users
 
-## How to use
+## Easy way to use
+
+The easiest way to use this project is through docker.hub:
+
+```bash
+docker run -d \
+  --name openvpn \
+  --cap-add=NET_ADMIN \
+  --device /dev/net/tun:/dev/net/tun \
+  -p 1194:1194/udp \
+  -v $(pwd)/openvpn/pki:/etc/openvpn/pki \
+  -v $(pwd)/server.conf:/etc/openvpn/server/server.conf:ro \
+  zfpsystems/easy-openvpn:latest
+```
+
+## How to use (building the image)
 
 ```bash
 docker compose build
