@@ -1,9 +1,41 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DOMAIN="${1:?usage: sync-letsencrypt-cert.sh <letsencrypt-domain>}"
+usage() {
+  cat >&2 <<USAGE
+usage:
+  sync-letsencrypt-cert.sh <letsencrypt-domain> [letsencrypt-live-dir] [openvpn-pki-dir]
+
+examples:
+  # Run from repo root on host (docker volume layout)
+  ./sync-letsencrypt-cert.sh vpn.example.com
+
+  # Explicit host path
+  ./sync-letsencrypt-cert.sh vpn.example.com /etc/letsencrypt/live ./openvpn/pki/easyrsa
+
+  # Run inside container
+  ./sync-letsencrypt-cert.sh vpn.example.com /etc/letsencrypt/live /etc/openvpn/pki/easyrsa
+USAGE
+}
+
+DOMAIN="${1:-}"
+if [[ -z "${DOMAIN}" ]]; then
+  usage
+  exit 1
+fi
+
 LE_BASE="${2:-/etc/letsencrypt/live}"
-OPENVPN_PKI="${3:-/etc/openvpn/pki/easyrsa}"
+DEFAULT_HOST_PKI="$(pwd)/openvpn/pki/easyrsa"
+DEFAULT_CONTAINER_PKI="/etc/openvpn/pki/easyrsa"
+
+if [[ -n "${3:-}" ]]; then
+  OPENVPN_PKI="${3}"
+elif [[ -d "${DEFAULT_HOST_PKI}" ]]; then
+  OPENVPN_PKI="${DEFAULT_HOST_PKI}"
+else
+  OPENVPN_PKI="${DEFAULT_CONTAINER_PKI}"
+fi
+
 OPENVPN_CERT_DIR="${OPENVPN_PKI}/issued"
 OPENVPN_KEY_DIR="${OPENVPN_PKI}/private"
 
@@ -25,4 +57,5 @@ install -m 600 "${LE_PRIVKEY}" "${TARGET_KEY}"
 echo "Synced ${DOMAIN} Let's Encrypt cert to:"
 echo "  ${TARGET_CERT}"
 echo "  ${TARGET_KEY}"
+echo "OpenVPN PKI root used: ${OPENVPN_PKI}"
 echo "Now restart OpenVPN so it reloads the certificate/key pair."
