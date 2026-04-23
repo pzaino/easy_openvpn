@@ -1,3 +1,5 @@
 # artifacts
 openvpn/
-
+.vscode/
+do.patch
+attic/

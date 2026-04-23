@@ -17,6 +17,6 @@ yes
 EOF
 
 echo "Client created: $CLIENT_NAME"
-echo "Cert: /etc/openvpn/pki/issued/$CLIENT_NAME.crt"
-echo "Key:  /etc/openvpn/pki/private/$CLIENT_NAME.key"
+echo "Cert: /etc/openvpn/pki/easyrsa/issued/$CLIENT_NAME.crt"
+echo "Key:  /etc/openvpn/pki/easyrsa/private/$CLIENT_NAME.key"
 

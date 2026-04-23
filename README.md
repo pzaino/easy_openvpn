@@ -1,7 +1,25 @@
 # Easy OpenVPN
 
-A simple and quick way to deploy an OpenVPN server, with some degrees of hardening and 
-enough to create custom users
+A simple and quick way to deploy an OpenVPN server, with some degrees of hardening and
+enough to create custom users.
+
+## Current repository review and improvement opportunities
+
+The project is already a strong base for a Dockerized OpenVPN server, but these are the
+highest-impact next improvements:
+
+1. **Certificate lifecycle automation**
+   - Add a documented flow to optionally use Let's Encrypt for the **server certificate**.
+   - Keep EasyRSA as the VPN client/CA trust anchor so existing client certificates keep working.
+2. **Cloud deployment path**
+   - Add a repeatable Google Cloud VM deployment guide (networking, firewall, and persistence).
+3. **Operational hardening**
+   - Persist host-level sysctl (`net.ipv4.ip_forward=1`) and make expected host firewall rules explicit.
+   - Add periodic backups for `openvpn/pki` and `openvpn/ccd`.
+4. **Quality checks**
+   - Add CI checks (shellcheck and a lightweight config validation step) to catch script regressions.
+
+---
 
 ## Easy way to use
 
@@ -42,7 +60,7 @@ openvpn/pki/tls-crypt.key
 
 At this point make a `laptop-alex.ovpn` with:
 
-```
+```text
 client
 dev tun
 proto udp
@@ -75,9 +93,10 @@ PASTE_TLS_CRYPT_KEY_HERE
 </tls-crypt>
 ```
 
-(for beginners things like `PASTE_TLS_CRYPT_KEY_HERE` means you'll need to copy and paste the conect of the described file inside the tag of the .ovpn file)
+(For beginners: `PASTE_TLS_CRYPT_KEY_HERE` means copying the content of that file into the
+matching block in the `.ovpn` file.)
 
-to get the content use the following commands:
+To get the content use these commands:
 
 ```bash
 cat openvpn/pki/easyrsa/ca.crt
@@ -86,18 +105,131 @@ cat openvpn/pki/easyrsa/private/laptop-alex.key
 cat openvpn/pki/tls-crypt.key
 ```
 
-(paste the content of each file inside the matching block in the .ovpn file).
-
-You can also use the provided script `make-ovpn.sh`. Syntax is as follow:
+You can also use the provided script `make-ovpn.sh`:
 
 ```bash
 ./make-ovpn.sh laptop-alex vpn.yourdomain.com
-``` 
+```
 
-
-## Run the Server
+## Run the server
 
 ```bash
 docker compose up -d
 ```
 
+---
+
+## Let's Encrypt support for OpenVPN server certs
+
+### Is it possible?
+
+**Yes, with caveats.** You can use Let's Encrypt for the **server leaf cert** (`server.crt` / `server.key`),
+while still using your EasyRSA CA for client certificates.
+
+Because VPN clients validate the server using the `<ca>` embedded in `.ovpn`, the simplest path is:
+
+- Keep EasyRSA CA for client auth and trust distribution.
+- Optionally swap only the OpenVPN server cert/key with Let's Encrypt material.
+
+> Important: if clients only trust your EasyRSA CA, and the server cert is signed by Let's Encrypt,
+> those clients must also trust the Let's Encrypt chain (or you'll need a dedicated trust strategy).
+
+### Practical implementation in this repo
+
+1. Obtain/renew Let's Encrypt certs on the host (typically via DNS-01 challenge for non-HTTP workloads).
+2. Sync cert files into OpenVPN PKI paths using:
+
+```bash
+./sync-letsencrypt-cert.sh vpn.example.com
+```
+
+3. Restart OpenVPN after sync:
+
+```bash
+docker compose restart openvpn
+```
+
+The helper script maps:
+
+- `/etc/letsencrypt/live/<domain>/fullchain.pem` -> `/etc/openvpn/pki/easyrsa/issued/server.crt`
+- `/etc/letsencrypt/live/<domain>/privkey.pem` -> `/etc/openvpn/pki/easyrsa/private/server.key`
+
+### Automating renewals
+
+Add a certbot deploy hook on the host:
+
+```bash
+#!/usr/bin/env bash
+set -e
+cd /path/to/this/repo
+./sync-letsencrypt-cert.sh vpn.example.com
+docker compose restart openvpn
+```
+
+---
+
+## Deploying in Google Cloud (Compute Engine VM)
+
+### 1) Create VM
+
+- OS: Debian 12 / Ubuntu 22.04+
+- Machine type: e2-small or better
+- Network tags: `openvpn-server`
+- Reserve a static external IP (recommended)
+
+### 2) Open firewall
+
+Create a VPC firewall rule allowing:
+
+- UDP `1194` to tag `openvpn-server`
+
+### 3) Prepare host
+
+```bash
+sudo apt-get update
+sudo apt-get install -y docker.io docker-compose-plugin git
+sudo usermod -aG docker $USER
+```
+
+(re-login once to refresh group membership)
+
+### 4) Clone and initialize
+
+```bash
+git clone <your-fork-or-repo-url> easy_openvpn
+cd easy_openvpn
+docker compose build
+docker compose run --rm openvpn init-pki
+docker compose up -d
+```
+
+### 5) Enable forwarding on host
+
+```bash
+echo 'net.ipv4.ip_forward=1' | sudo tee /etc/sysctl.d/99-openvpn.conf
+sudo sysctl --system
+```
+
+### 6) Verify service
+
+```bash
+docker compose ps
+docker compose logs --tail=100 openvpn
+```
+
+### 7) Client profile
+
+Use `make-ovpn.sh` with the VM static IP or DNS name:
+
+```bash
+./make-ovpn.sh laptop-alex <VM_STATIC_IP_OR_DNS>
+```
+
+---
+
+## Security notes
+
+- Prefer DNS name + static IP for stable client configs.
+- Backup `openvpn/pki` regularly (this is your CA and issued client material).
+- If using Let's Encrypt, ensure renew hook restarts OpenVPN quickly after renewal.
+- Keep `allow-compression no` and modern cipher suites as currently configured.
