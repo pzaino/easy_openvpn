@@ -116,7 +116,7 @@ Because VPN clients validate the server using the `<ca>` embedded in `.ovpn`, th
 > Important: if clients only trust your EasyRSA CA, and the server cert is signed by Let's Encrypt,
 > those clients must also trust the Let's Encrypt chain (or you'll need a dedicated trust strategy).
 
-### Practical implementation in this repo
+### Practical implementation 
 
 1. Obtain/renew Let's Encrypt certs on the host (typically via DNS-01 challenge for non-HTTP workloads).
 2. Sync cert files into OpenVPN PKI paths using:
