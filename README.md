@@ -3,24 +3,6 @@
 A simple and quick way to deploy an OpenVPN server, with some degrees of hardening and
 enough to create custom users.
 
-## Current repository review and improvement opportunities
-
-The project is already a strong base for a Dockerized OpenVPN server, but these are the
-highest-impact next improvements:
-
-1. **Certificate lifecycle automation**
-   - Add a documented flow to optionally use Let's Encrypt for the **server certificate**.
-   - Keep EasyRSA as the VPN client/CA trust anchor so existing client certificates keep working.
-2. **Cloud deployment path**
-   - Add a repeatable Google Cloud VM deployment guide (networking, firewall, and persistence).
-3. **Operational hardening**
-   - Persist host-level sysctl (`net.ipv4.ip_forward=1`) and make expected host firewall rules explicit.
-   - Add periodic backups for `openvpn/pki` and `openvpn/ccd`.
-4. **Quality checks**
-   - Add CI checks (shellcheck and a lightweight config validation step) to catch script regressions.
-
----
-
 ## Easy way to use
 
 The easiest way to use this project is through docker.hub:
