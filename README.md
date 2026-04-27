@@ -116,20 +116,41 @@ Because VPN clients validate the server using the `<ca>` embedded in `.ovpn`, th
 > Important: if clients only trust your EasyRSA CA, and the server cert is signed by Let's Encrypt,
 > those clients must also trust the Let's Encrypt chain (or you'll need a dedicated trust strategy).
 
-### Practical implementation 
+### Practical implementation
 
-1. Obtain/renew Let's Encrypt certs on the host (typically via DNS-01 challenge for non-HTTP workloads).
-2. Sync cert files into OpenVPN PKI paths using:
+Before we start, deploy easy-openvpn using the usual easy-rsa init script with:
 
 ```bash
-./sync-letsencrypt-cert.sh vpn.example.com
+docker compose run --rm openvpn init-pki
 ```
+
+Then follow these steps:
+
+1. Run the first time a certbot deploy hook on the host:
+
+  ```bash
+  sudo certbot certonly --manual --preferred-challenges dns -d myvpn.mydomain.com
+  ```
+
+  Please note: Let's encrypt will require you to add an acme challenge in your DNS records. This is a TXT record that should look like:
+  
+  ```plaintext
+  _acme-challenge.mydomain.com IN TXT "some_random_value_provided_by_letsencrypt"
+  ```
+
+  So when you are ready to add your DNS records, run the certbot command, wait for let's encrypt to tell you which content you need to put into the TXT record, add the TXT record to your DNS, and then wait for certbot to verify the challenge and issue the certificate.
+
+2. Sync cert files into OpenVPN PKI paths using:
+
+  ```bash
+  ./sync-letsencrypt-cert.sh vpn.example.com
+  ```
 
 3. Restart OpenVPN after sync:
 
-```bash
-docker compose restart openvpn
-```
+  ```bash
+  docker compose restart openvpn
+  ```
 
 The helper script maps:
 
@@ -138,7 +159,7 @@ The helper script maps:
 
 ### Automating renewals
 
-Add a certbot deploy hook on the host:
+Add a post-renewal hook in your certbot configuration to run the sync and restart:
 
 ```bash
 #!/usr/bin/env bash
@@ -147,6 +168,8 @@ cd /path/to/this/repo
 ./sync-letsencrypt-cert.sh vpn.example.com
 docker compose restart openvpn
 ```
+
+run this script to update your certs and restart openvpn. You shoul dbe able to run it in a cron job or as a certbot post-renewal hook to automate the process.
 
 ---
 
