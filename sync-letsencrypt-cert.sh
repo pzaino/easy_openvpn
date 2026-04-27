@@ -60,6 +60,9 @@ install -m 600 "${LE_PRIVKEY}" "${TARGET_KEY}"
 install -m 644 "${LE_CHAIN}" "${TARGET_CA_BUNDLE}"
 printf 'letsencrypt\n' > "${TARGET_MODE_FILE}"
 
+cat "${LE_CHAIN}" ./isrg-root-x1.pem | tee "${TARGET_CA_BUNDLE}" > /dev/null
+chmod 644 "${TARGET_CA_BUNDLE}"
+
 echo "Synced ${DOMAIN} Let's Encrypt cert to:"
 echo "  ${TARGET_CERT}"
 echo "  ${TARGET_KEY}"
