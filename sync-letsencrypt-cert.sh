@@ -9,7 +9,7 @@ usage:
 examples:
   ./sync-letsencrypt-cert.sh vpn.example.com
   ./sync-letsencrypt-cert.sh vpn.example.com /etc/letsencrypt/live ./openvpn/pki/easyrsa
-  ./sync-letsencrypt-cert.sh vpn.example.com /etc/letsencrypt/live ./openvpn/pki/easyrsa ./isrg-root-x1.pem
+  ./sync-letsencrypt-cert.sh vpn.example.com /etc/letsencrypt/live ./openvpn/pki/easyrsa ./ISRG-Root-X1.pem
 USAGE
 }
 
@@ -38,19 +38,17 @@ OPENVPN_KEY_DIR="${OPENVPN_PKI}/private"
 
 LE_CERT_DIR="${LE_BASE}/${DOMAIN}"
 LE_FULLCHAIN="${LE_CERT_DIR}/fullchain.pem"
-LE_CHAIN="${LE_CERT_DIR}/chain.pem"
 LE_PRIVKEY="${LE_CERT_DIR}/privkey.pem"
 
 TARGET_CERT="${OPENVPN_CERT_DIR}/server.crt"
 TARGET_KEY="${OPENVPN_KEY_DIR}/server.key"
-TARGET_CA_BUNDLE="${PKI_PARENT}/server-ca-bundle.pem"
+TARGET_ROOT_CA="${PKI_PARENT}/server-root-ca.pem"
 TARGET_MODE_FILE="${PKI_PARENT}/server-cert-mode"
 
-if [[ ! -f "${LE_FULLCHAIN}" || ! -f "${LE_CHAIN}" || ! -f "${LE_PRIVKEY}" ]]; then
+if [[ ! -f "${LE_FULLCHAIN}" || ! -f "${LE_PRIVKEY}" ]]; then
   echo "Let's Encrypt files not found for ${DOMAIN} under ${LE_CERT_DIR}" >&2
   echo "Expected:" >&2
   echo "  ${LE_FULLCHAIN}" >&2
-  echo "  ${LE_CHAIN}" >&2
   echo "  ${LE_PRIVKEY}" >&2
   exit 1
 fi
@@ -64,27 +62,20 @@ install -d -m 700 "${OPENVPN_CERT_DIR}" "${OPENVPN_KEY_DIR}" "${PKI_PARENT}"
 install -m 644 "${LE_FULLCHAIN}" "${TARGET_CERT}"
 install -m 600 "${LE_PRIVKEY}" "${TARGET_KEY}"
 
-tmp_bundle="$(mktemp)"
-cat "${LE_CHAIN}" > "${tmp_bundle}"
 if [[ -n "${ROOT_CA_PEM}" ]]; then
-  printf '\n' >> "${tmp_bundle}"
-  cat "${ROOT_CA_PEM}" >> "${tmp_bundle}"
+  install -m 644 "${ROOT_CA_PEM}" "${TARGET_ROOT_CA}"
 fi
-install -m 644 "${tmp_bundle}" "${TARGET_CA_BUNDLE}"
-rm -f "${tmp_bundle}"
 
 printf 'letsencrypt\n' > "${TARGET_MODE_FILE}"
 
 echo "Synced ${DOMAIN} Let's Encrypt cert to:"
 echo "  ${TARGET_CERT}"
 echo "  ${TARGET_KEY}"
-echo "Client trust bundle written to:"
-echo "  ${TARGET_CA_BUNDLE}"
 if [[ -n "${ROOT_CA_PEM}" ]]; then
-  echo "Included root CA PEM:"
-  echo "  ${ROOT_CA_PEM}"
+  echo "Client trust root written to:"
+  echo "  ${TARGET_ROOT_CA}"
 else
-  echo "No root CA PEM provided, bundle contains chain.pem only"
+  echo "No root CA PEM provided. Client generation in Let's Encrypt mode will fail until server-root-ca.pem is supplied."
 fi
 echo "Mode marker written to:"
 echo "  ${TARGET_MODE_FILE}"

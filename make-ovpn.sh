@@ -29,7 +29,7 @@ CLIENT_CERT="${EASYRSA_ROOT}/issued/${CLIENT}.crt"
 CLIENT_KEY="${EASYRSA_ROOT}/private/${CLIENT}.key"
 TLS_KEY="${PKI_ROOT}/tls-crypt.key"
 EASYRSA_CA="${EASYRSA_ROOT}/ca.crt"
-SERVER_CA_BUNDLE="${PKI_ROOT}/server-ca-bundle.pem"
+SERVER_ROOT_CA="${PKI_ROOT}/server-root-ca.pem"
 
 for f in "$SERVER_CERT" "$CLIENT_CERT" "$CLIENT_KEY" "$TLS_KEY"; do
   if [[ ! -f "$f" ]]; then
@@ -39,7 +39,6 @@ for f in "$SERVER_CERT" "$CLIENT_CERT" "$CLIENT_KEY" "$TLS_KEY"; do
 done
 
 ISSUER="$(openssl x509 -in "$SERVER_CERT" -noout -issuer 2>/dev/null || true)"
-SUBJECT="$(openssl x509 -in "$SERVER_CERT" -noout -subject 2>/dev/null || true)"
 
 CA_FILE=""
 VERIFY_NAME=""
@@ -48,21 +47,16 @@ if [[ "$ISSUER" == *"Easy-RSA CA"* ]]; then
   CA_FILE="$EASYRSA_CA"
   VERIFY_NAME="server"
 elif [[ "$ISSUER" == *"Let's Encrypt"* ]]; then
-  if [[ ! -f "$SERVER_CA_BUNDLE" ]]; then
-    echo "Detected Let's Encrypt server cert, but missing CA bundle:" >&2
-    echo "  $SERVER_CA_BUNDLE" >&2
+  if [[ ! -f "$SERVER_ROOT_CA" ]]; then
+    echo "Detected Let's Encrypt server cert, but missing root CA file:" >&2
+    echo "  $SERVER_ROOT_CA" >&2
     exit 1
   fi
-  CA_FILE="$SERVER_CA_BUNDLE"
+  CA_FILE="$SERVER_ROOT_CA"
   VERIFY_NAME="$SERVER"
 else
   echo "Unknown server certificate issuer:" >&2
   echo "  $ISSUER" >&2
-  exit 1
-fi
-
-if [[ ! -f "$CA_FILE" ]]; then
-  echo "Missing CA file: $CA_FILE" >&2
   exit 1
 fi
 
@@ -71,16 +65,12 @@ client
 dev tun
 proto udp
 remote ${SERVER} ${PORT}
-resolv-retry infinite
 nobind
-persist-key
-persist-tun
 
 remote-cert-tls server
 verify-x509-name ${VERIFY_NAME} name
 
 auth SHA256
-data-ciphers AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305
 verb 3
 
 <ca>
