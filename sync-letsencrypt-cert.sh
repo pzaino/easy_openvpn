@@ -4,12 +4,12 @@ set -euo pipefail
 usage() {
   cat >&2 <<USAGE
 usage:
-  sync-letsencrypt-cert.sh <letsencrypt-domain> [letsencrypt-live-dir] [openvpn-pki-dir]
+  sync-letsencrypt-cert.sh <letsencrypt-domain> [letsencrypt-live-dir] [openvpn-pki-dir] [root-ca-pem]
 
 examples:
   ./sync-letsencrypt-cert.sh vpn.example.com
   ./sync-letsencrypt-cert.sh vpn.example.com /etc/letsencrypt/live ./openvpn/pki/easyrsa
-  ./sync-letsencrypt-cert.sh vpn.example.com /etc/letsencrypt/live /etc/openvpn/pki/easyrsa
+  ./sync-letsencrypt-cert.sh vpn.example.com /etc/letsencrypt/live ./openvpn/pki/easyrsa ./isrg-root-x1.pem
 USAGE
 }
 
@@ -22,6 +22,7 @@ fi
 LE_BASE="${2:-/etc/letsencrypt/live}"
 DEFAULT_HOST_PKI="$(pwd)/openvpn/pki/easyrsa"
 DEFAULT_CONTAINER_PKI="/etc/openvpn/pki/easyrsa"
+ROOT_CA_PEM="${4:-}"
 
 if [[ -n "${3:-}" ]]; then
   OPENVPN_PKI="${3}"
@@ -54,20 +55,37 @@ if [[ ! -f "${LE_FULLCHAIN}" || ! -f "${LE_CHAIN}" || ! -f "${LE_PRIVKEY}" ]]; t
   exit 1
 fi
 
+if [[ -n "${ROOT_CA_PEM}" && ! -f "${ROOT_CA_PEM}" ]]; then
+  echo "Root CA PEM not found: ${ROOT_CA_PEM}" >&2
+  exit 1
+fi
+
 install -d -m 700 "${OPENVPN_CERT_DIR}" "${OPENVPN_KEY_DIR}" "${PKI_PARENT}"
 install -m 644 "${LE_FULLCHAIN}" "${TARGET_CERT}"
 install -m 600 "${LE_PRIVKEY}" "${TARGET_KEY}"
-install -m 644 "${LE_CHAIN}" "${TARGET_CA_BUNDLE}"
-printf 'letsencrypt\n' > "${TARGET_MODE_FILE}"
 
-cat "${LE_CHAIN}" ./isrg-root-x1.pem | tee "${TARGET_CA_BUNDLE}" > /dev/null
-chmod 644 "${TARGET_CA_BUNDLE}"
+tmp_bundle="$(mktemp)"
+cat "${LE_CHAIN}" > "${tmp_bundle}"
+if [[ -n "${ROOT_CA_PEM}" ]]; then
+  printf '\n' >> "${tmp_bundle}"
+  cat "${ROOT_CA_PEM}" >> "${tmp_bundle}"
+fi
+install -m 644 "${tmp_bundle}" "${TARGET_CA_BUNDLE}"
+rm -f "${tmp_bundle}"
+
+printf 'letsencrypt\n' > "${TARGET_MODE_FILE}"
 
 echo "Synced ${DOMAIN} Let's Encrypt cert to:"
 echo "  ${TARGET_CERT}"
 echo "  ${TARGET_KEY}"
 echo "Client trust bundle written to:"
 echo "  ${TARGET_CA_BUNDLE}"
+if [[ -n "${ROOT_CA_PEM}" ]]; then
+  echo "Included root CA PEM:"
+  echo "  ${ROOT_CA_PEM}"
+else
+  echo "No root CA PEM provided, bundle contains chain.pem only"
+fi
 echo "Mode marker written to:"
 echo "  ${TARGET_MODE_FILE}"
 echo "OpenVPN PKI root used: ${OPENVPN_PKI}"
